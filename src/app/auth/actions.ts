@@ -1,0 +1,13 @@
+"use server";
+import { redirect } from "next/navigation";
+import { z } from "zod";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+
+const credentials = z.object({email:z.string().email(),password:z.string().min(8).max(128)});
+const securePassword = z.string().min(8,"Use at least 8 characters.").max(128).regex(/[A-Z]/,"Include an uppercase letter.").regex(/[a-z]/,"Include a lowercase letter.").regex(/\d/,"Include a number.").regex(/[^A-Za-z0-9]/,"Include a special character.");
+const signUpCredentials = z.object({email:z.string().email(),password:securePassword,confirmPassword:z.string()}).refine(({password,confirmPassword})=>password===confirmPassword,{message:"Passwords do not match.",path:["confirmPassword"]});
+export type AuthState={error?:string;message?:string};
+export async function signIn(_:AuthState, formData:FormData):Promise<AuthState>{const parsed=credentials.safeParse(Object.fromEntries(formData));if(!parsed.success)return{error:"Enter a valid email and password of at least 8 characters."};const db=await createServerSupabaseClient();const {error}=await db.auth.signInWithPassword(parsed.data);if(error)return{error:error.message};redirect("/app")}
+export async function signUp(_:AuthState, formData:FormData):Promise<AuthState>{const parsed=signUpCredentials.safeParse(Object.fromEntries(formData));if(!parsed.success)return{error:parsed.error.issues[0]?.message??"Enter a valid email and password of at least 8 characters."};const db=await createServerSupabaseClient();const origin=(await import("next/headers")).headers;const credentialsData={email:parsed.data.email,password:parsed.data.password};const {data,error}=await db.auth.signUp({...credentialsData,options:{emailRedirectTo:`${(await origin()).get("origin")??process.env.NEXT_PUBLIC_SITE_URL??"http://localhost:3000"}/auth/callback`}});if(error)return{error:error.message};if(data.session)redirect("/app");return{message:"Your account was created. Check your email to finish signing in."}}
+export async function signOut(){const db=await createServerSupabaseClient();await db.auth.signOut();redirect("/")}
+export async function resetPassword(_:AuthState,formData:FormData):Promise<AuthState>{const email=z.string().email().safeParse(formData.get("email"));if(!email.success)return{error:"Enter a valid email address."};const db=await createServerSupabaseClient();const origin=(await import("next/headers")).headers;const {error}=await db.auth.resetPasswordForEmail(email.data,{redirectTo:`${(await origin()).get("origin")??process.env.NEXT_PUBLIC_SITE_URL??"http://localhost:3000"}/auth/callback?next=/reset-password`});return error?{error:error.message}:{message:"If an account exists, a reset link has been sent."}}

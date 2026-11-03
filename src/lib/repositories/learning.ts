@@ -1,0 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Roadmap } from "@/lib/validations/roadmap";
+
+export async function saveRoadmap(db: SupabaseClient, userId:string, roadmap:Roadmap, source:"meta_live"|"development_mock"|"manual") { const {data:path,error}=await db.from("learning_paths").insert({user_id:userId,title:roadmap.title,summary:roadmap.summary,source,status:"active"}).select().single(); if(error) throw error; const modules=roadmap.phases.flatMap((phase,phaseIndex)=>phase.modules.map((module,moduleIndex)=>({learning_path_id:path.id,title:module.title,objective:`${phase.title}: ${phase.objective}`,position:phaseIndex*100+moduleIndex+1}))); const {error:moduleError}=await db.from("learning_modules").insert(modules); if(moduleError) throw moduleError; return path; }
+export async function listRoadmaps(db:SupabaseClient,userId:string){const {data,error}=await db.from("learning_paths").select("id,title,summary,source,status,created_at,learning_modules(id,title,objective,position,learning_progress(status,updated_at))").eq("user_id",userId).order("created_at",{ascending:false});if(error)throw error;return data;}

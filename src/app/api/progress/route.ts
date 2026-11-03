@@ -1,0 +1,5 @@
+import { NextResponse } from "next/server";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { requireUserId } from "@/lib/security/auth";
+import { progressSchema } from "@/lib/validations/learner";
+export async function PUT(request:Request){try{const input=progressSchema.parse(await request.json());const db=await createServerSupabaseClient();const userId=await requireUserId(db.auth);const {data:module,error:moduleError}=await db.from("learning_modules").select("id").eq("id",input.moduleId).single();if(moduleError||!module) return NextResponse.json({error:"Learning module not found"},{status:404});const {error}=await db.from("learning_progress").upsert({user_id:userId,learning_module_id:input.moduleId,status:input.status,updated_at:new Date().toISOString()},{onConflict:"user_id,learning_module_id"});if(error)throw error;return NextResponse.json({ok:true});}catch(error){return NextResponse.json({error:error instanceof Error&&error.message==="UNAUTHORIZED"?"Sign in required":"Unable to update progress"},{status:error instanceof Error&&error.message==="UNAUTHORIZED"?401:400})}}
